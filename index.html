@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>電費時間電價單筆試算</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutral with Teal Accent (Background: #FDFBF8, Text: #3D405B, Accent: #81B29A, Secondary: #E07A5F) -->
+    <!-- Application Structure Plan: A straightforward single-page layout with an input form at the top and a results display area below. This structure is chosen for its simplicity and directness, perfectly suiting a single-input calculation tool. Users can easily input data and immediately see the calculated outcomes, making the interaction intuitive and efficient. -->
+    <!-- Visualization & Content Choices:
+    - Input Parameters: Goal: Collect Data. Viz/Presentation: HTML form fields (number inputs, select dropdown, checkbox). Interaction: User directly types or selects values. Justification: Provides clear, structured input for the calculation. Library: HTML/Tailwind/JS.
+    - School/Purpose Toggle: Goal: Conditional Input. Viz/Presentation: Checkbox controlling visibility of a dropdown and enabling/disabling peak/off-peak proportion inputs. Interaction: Checkbox click. Justification: Adapts the input form based on user's specific scenario (school vs. non-school, and school purpose) and automatically applies predefined proportions for schools. Library: HTML/Tailwind/JS.
+    - Calculation Results: Goal: Display Outcome. Viz/Presentation: Text labels with dynamically updated numerical values. Interaction: Display updates on button click. Justification: Provides immediate, clear feedback of the calculation results. Library: HTML/Tailwind/JS.
+    - Auxiliary Split KWH/Season Display: Goal: Provide Detail/Transparency. Viz/Presentation: Text labels with dynamically updated numerical and textual values. Interaction: Display updates on button click. Justification: Shows the intermediate steps of how the total KWH is split and categorized, enhancing user understanding of the calculation process. Library: HTML/Tailwind/JS.
+    CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #FDFBF8; color: #3D405B; }
+        .container { max-width: 900px; }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #81B29A;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8 md:mb-12">
+            <h1 class="text-3xl md:text-4xl font-bold mb-2">電費時間電價單筆試算器</h1>
+            <p class="text-lg text-gray-600">根據您的用電數據，預估時間電價與節省金額</p>
+        </header>
+
+        <main class="bg-white p-6 rounded-xl shadow-md mb-8">
+            <!-- Section: 輸入參數 -->
+            <h2 class="text-2xl font-bold mb-4 text-[#E07A5F]">輸入參數</h2>
+            <p class="mb-6 text-gray-600">請在此輸入您的電費帳單資訊與用電習慣，系統將自動為您計算。</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="inputKWH" class="block text-sm font-medium text-gray-700">本期總用電度數 (kWh)</label>
+                    <input type="number" id="inputKWH" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#81B29A] focus:border-[#81B29A] sm:text-sm" placeholder="例如: 132080" value="132080">
+                </div>
+                <div>
+                    <label for="inputBill" class="block text-sm font-medium text-gray-700">本期應繳總金額 (元)</label>
+                    <input type="number" id="inputBill" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#81B29A] focus:border-[#81B29A] sm:text-sm" placeholder="例如: 993196" value="993196">
+                </div>
+                <div>
+                    <label for="inputMonth" class="block text-sm font-medium text-gray-700">本期帳單月份 (數字 1-12)</label>
+                    <input type="number" id="inputMonth" min="1" max="12" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#81B29A] focus:border-[#81B29A] sm:text-sm" placeholder="例如: 9" value="9">
+                </div>
+                <div>
+                    <label for="peakProportion" class="block text-sm font-medium text-gray-700">尖峰用電占比 (例如 0.8)</label>
+                    <input type="number" step="0.01" id="peakProportion" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#81B29A] focus:border-[#81B29A] sm:text-sm" placeholder="例如: 0.8" value="0.80">
+                </div>
+                <div>
+                    <label for="offpeakProportion" class="block text-sm font-medium text-gray-700">離峰用電占比 (例如 0.2)</label>
+                    <input type="number" step="0.01" id="offpeakProportion" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#81B29A] focus:border-[#81B29A] sm:text-sm" placeholder="例如: 0.2" value="0.20">
+                </div>
+                <div class="flex items-center">
+                    <input id="isSchool" type="checkbox" class="h-4 w-4 text-[#81B29A] focus:ring-[#81B29A] border-gray-300 rounded">
+                    <label for="isSchool" class="ml-2 block text-sm text-gray-900">是否為學校 (將套用學校用電占比)</label>
+                </div>
+                <div id="schoolPurposeContainer" class="hidden">
+                    <label for="schoolPurpose" class="block text-sm font-medium text-gray-700">學校用途</label>
+                    <select id="schoolPurpose" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#81B29A] focus:border-[#81B29A] sm:text-sm">
+                        <option value="非宿舍">非宿舍</option>
+                        <option value="宿舍">宿舍</option>
+                    </select>
+                </div>
+            </div>
+            <button id="calculateBtn" class="mt-6 w-full bg-[#81B29A] text-white py-2 px-4 rounded-md hover:bg-[#6a9a81] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#81B29A]">
+                執行計算
+                <span id="loadingSpinner" class="loading-spinner hidden"></span>
+            </button>
+            <p id="errorMessage" class="text-red-600 mt-2 hidden text-center"></p>
+        </main>
+
+        <!-- Section: 計算結果 -->
+        <section class="bg-white p-6 rounded-xl shadow-md">
+            <h2 class="text-2xl font-bold mb-4 text-[#81B29A]">計算結果</h2>
+            <p class="mb-6 text-gray-600">此處顯示根據您輸入參數計算出的時間電價預估結果與潛在節省金額。</p>
+            <div id="resultsDisplay" class="space-y-3 text-lg font-medium">
+                <p><strong>原始應繳總金額:</strong> <span id="displayOriginalBill" class="text-[#E07A5F]">0.00</span> 元</p>
+                <p><strong>預計時間電價總金額:</strong> <span id="displayTimeBill" class="text-[#81B29A]">0.00</span> 元</p>
+                <p><strong>預計可省下金額:</strong> <span id="displaySavings" class="text-[#81B29A]">0.00</span> 元</p>
+            </div>
+
+            <h3 class="text-xl font-bold mt-8 mb-4 text-[#E07A5F]">用電度數分拆與季節資訊</h3>
+            <p class="mb-6 text-gray-600">本試算將總用電度數平均分拆至前兩個月份，並判斷其所屬季節。</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="p-4 border rounded-lg bg-gray-50">
+                    <p class="font-semibold">前一個月分攤度數:</p>
+                    <p class="text-lg"><span id="splitKWHMonth1">0.00</span> kWh <span id="month1Display" class="text-gray-600"></span></p>
+                    <p class="text-base"><span id="season1Display" class="text-gray-600"></span></p>
+                </div>
+                <div class="p-4 border rounded-lg bg-gray-50">
+                    <p class="font-semibold">前兩個月分攤度數:</p>
+                    <p class="text-lg"><span id="splitKWHMonth2">0.00</span> kWh <span id="month2Display" class="text-gray-600"></span></p>
+                    <p class="text-base"><span id="season2Display" class="text-gray-600"></span></p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // --- 電價費率和用電占比常量 (與 Apps Script 保持一致) ---
+        const BASIC_CHARGE_PER_MONTH = 75;
+        const RATE_SUMMER_PEAK = 5.01;
+        const RATE_SUMMER_OFFPEAK = 1.96;
+        const RATE_NONSUMMER_PEAK = 4.78;
+        const RATE_NONSUMMER_OFFPEAK = 1.89;
+        const EXTRA_CHARGE_THRESHOLD = 2000;
+        const EXTRA_CHARGE_RATE = 1.02;
+
+        const DEFAULT_PEAK_PROPORTION_SUMMER = 0.80;
+        const DEFAULT_OFFPEAK_PROPORTION_SUMMER = 0.20;
+        const DEFAULT_PEAK_PROPORTION_NONSUMMER = 0.80;
+        const DEFAULT_OFFPEAK_PROPORTION_NONSUMMER = 0.20;
+
+        const DORM_PEAK_PROPORTION_SUMMER = 0.47;
+        const DORM_OFFPEAK_PROPORTION_SUMMER = 0.53;
+        const DORM_PEAK_PROPORTION_NONSUMMER = 0.57;
+        const DORM_OFFPEAK_PROPORTION_NONSUMMER = 0.43;
+
+        const SCHOOL_NON_DORM_PEAK_PROPORTION_SUMMER = 0.75;
+        const SCHOOL_NON_DORM_OFFPEAK_PROPORTION_SUMMER = 0.25;
+        const SCHOOL_NON_DORM_PEAK_PROPORTION_NONSUMMER = 0.60;
+        const SCHOOL_NON_DORM_OFFPEAK_PROPORTION_NONSUMMER = 0.40;
+
+        // --- Helper functions (adapted from Apps Script's safeParseFloat/Int) ---
+        function safeParseFloat(value) {
+            if (value === null || typeof value === 'undefined' || (typeof value === 'string' && value.trim() === '')) {
+                return 0;
+            }
+            const parsed = parseFloat(value);
+            return isNaN(parsed) ? 0 : parsed;
+        }
+
+        function safeParseInt(value) {
+            if (value === null || typeof value === 'undefined' || (typeof value === 'string' && value.trim() === '')) {
+                return 0;
+            }
+            const parsed = parseInt(value);
+            return isNaN(parsed) ? 0 : parsed;
+        }
+
+        // --- Main calculation logic (adapted from Apps Script's calculateElectricityBill) ---
+        function calculateElectricityBillWeb() {
+            const inputKWH = safeParseFloat(document.getElementById('inputKWH').value);
+            const inputBill = safeParseFloat(document.getElementById('inputBill').value);
+            const currentBillingMonth = safeParseInt(document.getElementById('inputMonth').value);
+            let peakProportion = safeParseFloat(document.getElementById('peakProportion').value);
+            let offpeakProportion = safeParseFloat(document.getElementById('offpeakProportion').value);
+            const isSchool = document.getElementById('isSchool').checked;
+            const schoolPurpose = document.getElementById('schoolPurpose').value;
+
+            const errorMessageElement = document.getElementById('errorMessage');
+            errorMessageElement.classList.add('hidden'); // Clear previous errors
+
+            // Input Validation
+            const EPSILON = 0.01;
+            if (inputKWH <= 0 || inputBill <= 0 || currentBillingMonth < 1 || currentBillingMonth > 12 ||
+                peakProportion < 0 || peakProportion > 1 || offpeakProportion < 0 || offpeakProportion > 1) {
+                errorMessageElement.textContent = "請輸入有效的數值：用電度數/應繳總金額 (>0)、月份(1-12)、尖峰/離峰占比(0-1)。";
+                errorMessageElement.classList.remove('hidden');
+                return;
+            }
+            if (Math.abs(peakProportion + offpeakProportion - 1) > EPSILON) {
+                errorMessageElement.textContent = "尖峰與離峰占比之和必須接近1。";
+                errorMessageElement.classList.remove('hidden');
+                return;
+            }
+
+            // Determine proportions based on school status and purpose
+            let currentPeakPropSummer = DEFAULT_PEAK_PROPORTION_SUMMER;
+            let currentOffpeakPropSummer = DEFAULT_OFFPEAK_PROPORTION_SUMMER;
+            let currentPeakPropNonSummer = DEFAULT_PEAK_PROPORTION_NONSUMMER;
+            let currentOffpeakPropNonSummer = DEFAULT_OFFPEAK_PROPORTION_NONSUMMER;
+
+            if (isSchool) {
+                if (schoolPurpose === '宿舍') {
+                    currentPeakPropSummer = DORM_PEAK_PROPORTION_SUMMER;
+                    currentOffpeakPropSummer = DORM_OFFPEAK_PROPORTION_SUMMER;
+                    currentPeakPropNonSummer = DORM_PEAK_PROPORTION_NONSUMMER;
+                    currentOffpeakPropNonSummer = DORM_OFFPEAK_PROPORTION_NONSUMMER;
+                } else { // 非宿舍
+                    currentPeakPropSummer = SCHOOL_NON_DORM_PEAK_PROPORTION_SUMMER;
+                    currentOffpeakPropSummer = SCHOOL_NON_DORM_OFFPEAK_PROPORTION_SUMMER;
+                    currentPeakPropNonSummer = SCHOOL_NON_DORM_PEAK_PROPORTION_NONSUMMER;
+                    currentOffpeakPropNonSummer = SCHOOL_NON_DORM_OFFPEAK_PROPORTION_NONSUMMER;
+                }
+                // When isSchool is checked, the input fields for peak/off-peak proportions
+                // will be disabled and updated by the event listener, so we use those values
+                // from the constants directly in calculation.
+                // No need to override peakProportion/offpeakProportion here as they are read from input fields.
+            }
+
+
+            let totalTimePriceCalculated = 0.0;
+            const kwhSplits = [inputKWH / 2, inputKWH / 2];
+            const months = [];
+            const seasons = [];
+
+            months[0] = currentBillingMonth - 1;
+            if (months[0] < 1) months[0] += 12;
+
+            months[1] = currentBillingMonth - 2;
+            if (months[1] < 1) months[1] += 12;
+
+            for (let i = 0; i < 2; i++) {
+                const currentMonth = months[i];
+                const currentKWH = kwhSplits[i];
+                let currentPeakRate;
+                let currentOffpeakRate;
+                let seasonText;
+
+                // Use the correct school/non-school proportions based on the current month's season
+                let effectivePeakProp = peakProportion; // Start with user's input or last set value
+                let effectiveOffpeakProp = offpeakProportion;
+
+                if (isSchool) {
+                    if (currentMonth >= 6 && currentMonth <= 9) { // Summer
+                        effectivePeakProp = currentPeakPropSummer;
+                        effectiveOffpeakProp = currentOffpeakPropSummer;
+                    } else { // Non-Summer
+                        effectivePeakProp = currentPeakPropNonSummer;
+                        effectiveOffpeakProp = currentOffpeakPropNonSummer;
+                    }
+                } else { // Not a school, use default non-school proportions
+                    if (currentMonth >= 6 && currentMonth <= 9) { // Summer
+                         effectivePeakProp = DEFAULT_PEAK_PROPORTION_SUMMER;
+                         effectiveOffpeakProp = DEFAULT_OFFPEAK_PROPORTION_SUMMER;
+                    } else { // Non-Summer
+                         effectivePeakProp = DEFAULT_PEAK_PROPORTION_NONSUMMER;
+                         effectiveOffpeakProp = DEFAULT_OFFPEAK_PROPORTION_NONSUMMER;
+                    }
+                }
+
+
+                if (currentMonth >= 6 && currentMonth <= 9) {
+                    seasonText = "夏月";
+                    currentPeakRate = RATE_SUMMER_PEAK;
+                    currentOffpeakRate = RATE_SUMMER_OFFPEAK;
+                } else {
+                    seasonText = "非夏月";
+                    currentPeakRate = RATE_NONSUMMER_PEAK;
+                    currentOffpeakRate = RATE_NONSUMMER_OFFPEAK;
+                }
+                seasons[i] = seasonText;
+
+                const peakKWH = currentKWH * effectivePeakProp;
+                const offpeakKWH = currentKWH * effectiveOffpeakProp;
+
+                const flowCharge = (peakKWH * currentPeakRate) + (offpeakKWH * currentOffpeakRate);
+
+                let extraCharge = 0;
+                if (currentKWH > EXTRA_CHARGE_THRESHOLD) {
+                    extraCharge = (currentKWH - EXTRA_CHARGE_THRESHOLD) * EXTRA_CHARGE_RATE;
+                }
+                
+                totalTimePriceCalculated += (flowCharge + extraCharge);
+            }
+
+            totalTimePriceCalculated += BASIC_CHARGE_PER_MONTH;
+
+            // Display results
+            document.getElementById('displayOriginalBill').textContent = inputBill.toFixed(2);
+            document.getElementById('displayTimeBill').textContent = totalTimePriceCalculated.toFixed(2);
+            document.getElementById('displaySavings').textContent = (inputBill - totalTimePriceCalculated).toFixed(2);
+
+            // Display auxiliary info
+            document.getElementById('splitKWHMonth1').textContent = kwhSplits[0].toFixed(2);
+            document.getElementById('month1Display').textContent = `(${months[0]}月)`;
+            document.getElementById('season1Display').textContent = `季節: ${seasons[0]}`;
+
+            document.getElementById('splitKWHMonth2').textContent = kwhSplits[1].toFixed(2);
+            document.getElementById('month2Display').textContent = `(${months[1]}月)`;
+            document.getElementById('season2Display').textContent = `季節: ${seasons[1]}`;
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', function() {
+            const calculateBtn = document.getElementById('calculateBtn');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const isSchoolCheckbox = document.getElementById('isSchool');
+            const schoolPurposeContainer = document.getElementById('schoolPurposeContainer');
+            const schoolPurposeSelect = document.getElementById('schoolPurpose');
+            const peakProportionInput = document.getElementById('peakProportion');
+            const offpeakProportionInput = document.getElementById('offpeakProportion');
+
+            // Function to update peak/off-peak proportion inputs based on school status and purpose
+            function updateProportionInputs() {
+                if (isSchoolCheckbox.checked) {
+                    peakProportionInput.disabled = true;
+                    offpeakProportionInput.disabled = true;
+                    let peakProp, offpeakProp;
+                    if (schoolPurposeSelect.value === '宿舍') {
+                        peakProp = DORM_PEAK_PROPORTION_SUMMER;
+                        offpeakProp = DORM_OFFPEAK_PROPORTION_SUMMER;
+                    } else { // 非宿舍
+                        peakProp = SCHOOL_NON_DORM_PEAK_PROPORTION_SUMMER;
+                        offpeakProp = SCHOOL_NON_DORM_OFFPEAK_PROPORTION_SUMMER;
+                    }
+                    peakProportionInput.value = peakProp.toFixed(2);
+                    offpeakProportionInput.value = offpeakProp.toFixed(2);
+                } else {
+                    peakProportionInput.disabled = false;
+                    offpeakProportionInput.disabled = false;
+                    // Revert to default non-school proportions when unchecked
+                    peakProportionInput.value = DEFAULT_PEAK_PROPORTION_SUMMER.toFixed(2);
+                    offpeakProportionInput.value = DEFAULT_OFFPEAK_PROPORTION_SUMMER.toFixed(2);
+                }
+                calculateElectricityBillWeb(); // Recalculate after updating proportions
+            }
+
+            // Initial setup on page load
+            updateProportionInputs(); // Set initial state of proportion inputs
+            calculateElectricityBillWeb(); // Perform initial calculation
+
+            calculateBtn.addEventListener('click', function() {
+                loadingSpinner.classList.remove('hidden');
+                calculateBtn.disabled = true;
+                setTimeout(() => {
+                    calculateElectricityBillWeb();
+                    loadingSpinner.classList.add('hidden');
+                    calculateBtn.disabled = false;
+                }, 200);
+            });
+
+            isSchoolCheckbox.addEventListener('change', function() {
+                if (isSchoolCheckbox.checked) {
+                    schoolPurposeContainer.classList.remove('hidden');
+                } else {
+                    schoolPurposeContainer.classList.add('hidden');
+                }
+                updateProportionInputs(); // Update proportions when school checkbox changes
+            });
+
+            schoolPurposeSelect.addEventListener('change', function() {
+                updateProportionInputs(); // Update proportions when school purpose changes
+            });
+
+            // Re-calculate when other input fields change (for a more dynamic feel)
+            document.querySelectorAll('#inputKWH, #inputBill, #inputMonth').forEach(input => {
+                input.addEventListener('input', function() {
+                    calculateElectricityBillWeb();
+                });
+            });
+
+            // Only add input listeners for peak/off-peak if they are NOT disabled
+            peakProportionInput.addEventListener('input', function() {
+                if (!this.disabled) {
+                    calculateElectricityBillWeb();
+                }
+            });
+            offpeakProportionInput.addEventListener('input', function() {
+                if (!this.disabled) {
+                    calculateElectricityBillWeb();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
